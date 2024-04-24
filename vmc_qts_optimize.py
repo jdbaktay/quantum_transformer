@@ -44,60 +44,60 @@ def calc_aI(state, Q, K, V, W):
     return alist, z
 
 def get_logders(state, Q, K, V, W):
-	xlist = state.reshape(Nc, L)
+    xlist = state.reshape(Nc, L)
 
-	aI, z = calc_aI(state, Q, K, V, W)
+    aI, z = calc_aI(state, Q, K, V, W)
 
-	Vx = np.matmul(xlist, V.T)
+    Vx = np.matmul(xlist, V.T)
 
-	aJv = (aI[:, np.newaxis] * Vx).reshape(N)
+    aJv = (aI[:, np.newaxis] * Vx).reshape(N)
 
-	#################### logder_Q and K ################################
+    #################### logder_Q and K ################################
 
-	daI_dQ, daI_dK = [], []
-	for I in range(Nc):
-	    zII = z[I, I]
-	    zIJ = z[I, :]
-	    xI = xlist[I]
+    daI_dQ, daI_dK = [], []
+    for I in range(Nc):
+        zII = z[I, I]
+        zIJ = z[I, :]
+        xI = xlist[I]
 
-	    Qder, Kder = calc_dQdK(aI[I], zII, zIJ, xI, xlist, Q, K)
+        Qder, Kder = calc_dQdK(aI[I], zII, zIJ, xI, xlist, Q, K)
 
-	    daI_dQ.append(Qder)
-	    daI_dK.append(Kder)
+        daI_dQ.append(Qder)
+        daI_dK.append(Kder)
 
-	daI_dQ = np.array(daI_dQ)
-	daI_dK = np.array(daI_dK)
+    daI_dQ = np.array(daI_dQ)
+    daI_dK = np.array(daI_dK)
 
-	daI_dQ_v = np.zeros((Nc, L, L, L), dtype=complex)
-	daI_dK_v = np.zeros((Nc, L, L, L), dtype=complex)
-	for I in range(Nc):
-	    for J in range(L):
-	        daI_dQ_v[I, J, :, :] = Vx[I, J] * daI_dQ[I, :, :]
-	        daI_dK_v[I, J, :, :] = Vx[I, J] * daI_dK[I, :, :]
+    daI_dQ_v = np.zeros((Nc, L, L, L), dtype=complex)
+    daI_dK_v = np.zeros((Nc, L, L, L), dtype=complex)
+    for I in range(Nc):
+        for J in range(L):
+            daI_dQ_v[I, J, :, :] = Vx[I, J] * daI_dQ[I, :, :]
+            daI_dK_v[I, J, :, :] = Vx[I, J] * daI_dK[I, :, :]
 
-	daI_dQ_v = daI_dQ_v.reshape(Nc * L, L, L)
-	daI_dK_v = daI_dK_v.reshape(Nc * L, L, L)
+    daI_dQ_v = daI_dQ_v.reshape(Nc * L, L, L)
+    daI_dK_v = daI_dK_v.reshape(Nc * L, L, L)
 
-	Qder1 = np.tensordot(daI_dQ_v, W @ aJv, axes=(0, 0))
-	Qder2 = np.tensordot(W, daI_dQ_v, axes=(1, 0))
-	Qder2 = np.tensordot(aJv, Qder2, axes=(0, 0))
-	tmp_logder_Q = Qder1 + Qder2
+    Qder1 = np.tensordot(daI_dQ_v, W @ aJv, axes=(0, 0))
+    Qder2 = np.tensordot(W, daI_dQ_v, axes=(1, 0))
+    Qder2 = np.tensordot(aJv, Qder2, axes=(0, 0))
+    tmp_logder_Q = Qder1 + Qder2
 
-	Kder1 = np.tensordot(daI_dK_v, W @ aJv, axes=(0, 0))
-	Kder2 = np.tensordot(W, daI_dK_v, axes=(1, 0))
-	Kder2 = np.tensordot(aJv, Kder2, axes=(0, 0))
-	tmp_logder_K = Kder1 + Kder2
+    Kder1 = np.tensordot(daI_dK_v, W @ aJv, axes=(0, 0))
+    Kder2 = np.tensordot(W, daI_dK_v, axes=(1, 0))
+    Kder2 = np.tensordot(aJv, Kder2, axes=(0, 0))
+    tmp_logder_K = Kder1 + Kder2
 
-	#################### logder_W ######################################
+    #################### logder_W ######################################
 
     tmp_logder_W = np.outer(aJv, aJv.conj().T) # check this
 
-	#################### logder_V ######################################
+    #################### logder_V ######################################
 
-	return tmp_logder_Q, tmp_logder_K, tmp_logder_V, tmp_logder_W
+    return tmp_logder_Q, tmp_logder_K, tmp_logder_V, tmp_logder_W
 
 def get_coeff_2(state, Q, K, V, W):
-	xlist = state.reshape(Nc, L)
+    xlist = state.reshape(Nc, L)
 
     Qx = np.matmul(xlist, Q.T)
     Kx = np.matmul(xlist, K.T)
