@@ -117,7 +117,109 @@ print(spla.norm(manDerK - Kder))
 
 
 
+def get_logders(state, Q,K,V,W):
+    if np.iscomplex(W).any():
+        COMPLEX = 1
+    else:
+        COMPLEX = 0
+    dtype = 'float64'
+    if COMPLEX:
+        dtype = 'complex128'
+    # t1= time.time()
+    N = len(W[:,0])
+    L = len(Q[:,0])
+    Nc = N // L
+    xlist = np.reshape(state,(Nc,L))
+    z = np.zeros((Nc,Nc), dtype=dtype)
+    for i in range(Nc):
+        for j in range(Nc):
+            xI = xlist[i]
+            xJ = xlist[j]
+            qI = np.matmul(Q,xI)
+            kJ = np.matmul(K,xJ)
+            # z[i,j] = np.inner(np.conj(qI), kJ)/np.sqrt(L)
+            z[i,j] = np.inner(qI, kJ)/np.sqrt(L)
+            
+    a = np.zeros(Nc, dtype=dtype)
+    for i in range(Nc):
+        aI = np.exp(-z[i,i])
+        denom = 0
+        for j in range(Nc):
+            denom += np.exp(-z[i,j])
+            # print(denom)
+        aI /= denom
+        a[i] = aI
+    alist = a
+    aVx = []
+    ax = []
+    Vx = []
+    for i in range(Nc):
+        aI = alist[i]
+        xI = xlist[i] 
+        ax.append(aI*xI)
+        aVx.append(aI*np.matmul(V,xI))
+        Vx.append(np.matmul(V,xI))
+    vtilde = np.concatenate(aVx) # vtilde = aVx
+    
+    OV = np.zeros((L,L), dtype=dtype)
+    OQ = np.zeros((L,L), dtype=dtype)
+    OK = np.zeros((L,L), dtype=dtype)
+    # alist = aa
+    for i in range(L):
+        for j in range(L):
+            for I in range(Nc):
+                for J in range(Nc):
+                    aI = alist[I]
+                    aJ = alist[J]
+                    xI = xlist[I]
+                    xJ = xlist[J]
+                    vI = V@xI
+                    vJ = V@xJ
+                    for k in range(L):
+                        OV[i,j] += aI*xI[j]*W[int(I*L+i), int(J*L+k)]*aJ*vJ[k] \
+                            + aI*vI[k]*W[int(I*L+k),int(J*L+i)]*aJ*xJ[j]
 
+    for i in range(L):
+        for j in range(L):
+            daI_dQ_lst = np.zeros(Nc, dtype=dtype)
+            daI_dK_lst = np.zeros(Nc, dtype=dtype)
+            for I in range(Nc):
+                aI = alist[I]
+                xI = xlist[I]
+                qI = Q@xI
+                kI = K@xI
+                daI_dQ_lst[I] = -aI * xI[j]*kI[i]/np.sqrt(L)
+                daI_dK_lst[I] = -aI * xI[j]*qI[i]/np.sqrt(L)
+                for J in range(Nc):
+                    kJ = K@xlist[J]
+                    qJ = Q@xlist[J]
+                    xJ = xlist[J]
+                    daI_dQ_lst[I] += (aI)**2 * np.exp(-z[I,J] + z[I,I]) * xI[j]*kJ[i] / np.sqrt(L)
+                    daI_dK_lst[I] += (aI)**2 * np.exp(-z[I,J] + z[I,I]) * xJ[j]*qI[i] / np.sqrt(L)
+                    
+            for I in range(Nc):
+                for J in range(Nc):
+                    for k in range(L):
+                        for l in range(L):
+                            vI = V@xlist[I]
+                            vJ = V@xlist[J]
+                            aI = alist[I]
+                            aJ = alist[J]
+                            daIdQ = daI_dQ_lst[I]
+                            daJdQ = daI_dQ_lst[J]
+                            daIdK = daI_dK_lst[I]
+                            daJdK = daI_dK_lst[J]
+                            OQ[i,j] += W[int(I*L)+k,int(J*L+l)]*(daIdQ * aJ + \
+                                                                  aI * daJdQ) * vI[k]*vJ[l]
+                            OK[i,j] += W[int(I*L)+k,int(J*L+l)]*(daIdK* aJ + \
+                                                                  aI* daJdK) * vI[k]*vJ[l]
+    # print()
+    logderW = np.outer(vtilde,vtilde)
+    logderV = OV
+    logderQ = OQ
+    logderK = OK
+
+    return logderQ, logderK, logderV, logderW
 
 
 
