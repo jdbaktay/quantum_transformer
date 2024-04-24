@@ -1,21 +1,18 @@
 import numpy as np
 import scipy.linalg as spla
 
-def calc_dQ(aI, zII, zIJ, xI, O, xlist):
-    term1 = -aI * np.outer(O @ xI, xI)
+def calc_dQdK(aI, zII, zIJ, xI, xlist, Q, K):
+    Qterm1 = -aI * np.outer(K @ xI, xI)
+    Kterm1 = -aI * np.outer(Q @ xI, xI)
 
-    term2 = 0
+    Qterm2, Kterm2 = 0, 0
     for J, row in enumerate(xlist):
-        term2 += aI**2 * np.exp(-zIJ[J] + zII) * np.outer(O @ row, xI)
-    return (term1 + term2) * (1 / np.sqrt(L))
+        Qterm2 += aI**2 * np.exp(-zIJ[J] + zII) * np.outer(K @ row, xI)
+        Kterm2 += aI**2 * np.exp(-zIJ[J] + zII) * np.outer(Q @ xI, row)
 
-def calc_dK(aI, zII, zIJ, xI, O, xlist):
-    term1 = -aI * np.outer(O @ xI, xI)
-
-    term2 = 0
-    for J, row in enumerate(xlist):
-        term2 += aI**2 * np.exp(-zIJ[J] + zII) * np.outer(O @ xI, row)
-    return (term1 + term2) * (1 / np.sqrt(L))
+    Qder = (Qterm1 + Qterm2) * (1 / np.sqrt(L))
+    Kder = (Kterm1 + Kterm2) * (1 / np.sqrt(L))
+    return Qder, Kder
 
 def calc_aI(state, Q, K, V, W):
     xlist = state.reshape(Nc, L)
@@ -66,8 +63,10 @@ for I in range(Nc):
     zIJ = z[I, :]
     xI = xlist[I]
 
-    daI_dQ.append(calc_dQ(aI[I], zII, zIJ, xI, K, xlist)) 
-    daI_dK.append(calc_dK(aI[I], zII, zIJ, xI, Q, xlist))
+    Qder, Kder = calc_dQdK(aI[I], zII, zIJ, xI, xlist, Q, K)
+
+    daI_dQ.append(Qder)
+    daI_dK.append(Kder)
 
 daI_dQ = np.array(daI_dQ)
 daI_dK = np.array(daI_dK)
