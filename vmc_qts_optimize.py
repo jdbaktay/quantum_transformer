@@ -90,7 +90,7 @@ def get_logders(state, Q, K, V, W):
 
     #################### logder_W ######################################
 
-    tmp_logder_W = np.outer(aJv, aJv.conj().T) # check this
+    tmp_logder_W = np.outer(aJv, aJv)
 
     #################### logder_V ######################################
 
