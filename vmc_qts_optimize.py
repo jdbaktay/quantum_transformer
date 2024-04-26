@@ -94,6 +94,22 @@ def get_logders(state, Q, K, V, W):
 
     #################### logder_V ######################################
 
+    reorder = list(range(0, N, 2)) + list(range(1, N, 2))
+
+    aIxI = (aI[:, np.newaxis] * xlist).reshape(N)[reorder]
+
+    WaJv = (W @ aJv)[reorder]
+    aJvW = (aJv @ W)[reorder]
+
+    WaJv_sets = [WaJv[:N//2], WaJv[N//2:]] 
+    aJvW_sets = [aJvW[:N//2], aJvW[N//2:]] 
+    aIxI_sets = [aIxI[:N//2], aIxI[N//2:]]
+
+    tmp_logder_V = np.zeros((L, L), dtype=complex)
+    for i in range(L):
+        for j in range(L):
+            tmp_logder_V[i, j] = aIxI_sets[j].dot(WaJv_sets[i]) \
+                               + aJvW_sets[i].dot(aIxI_sets[j])
     return tmp_logder_Q, tmp_logder_K, tmp_logder_V, tmp_logder_W
 
 def get_coeff_2(state, Q, K, V, W):
