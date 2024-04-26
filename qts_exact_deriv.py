@@ -14,6 +14,27 @@ def calc_dQdK(aI, zII, zIJ, xI, xlist, Q, K):
     Kder = (Kterm1 + Kterm2) * (1 / np.sqrt(L))
     return Qder, Kder
 
+def calc_dV(aI, xlist, V, W):
+    aJv = (aI[:, np.newaxis] * np.matmul(xlist, V.T)).reshape(N)
+
+    reorder = list(range(0, N, 2)) + list(range(1, N, 2))
+
+    aIxI = (aI[:, np.newaxis] * xlist).reshape(N)[reorder]
+
+    WaJv = (W @ aJv)[reorder]
+    aJvW = (aJv @ W)[reorder]
+
+    WaJv_sets = [WaJv[:N//2], WaJv[N//2:]] # evens, odds
+    aJvW_sets = [aJvW[:N//2], aJvW[N//2:]] # evens, odds
+    aIxI_sets = [aIxI[:N//2], aIxI[N//2:]] # evens, odds
+
+    logder_V = np.zeros((L, L), dtype=complex)
+    for i in range(L):
+        for j in range(L):
+            logder_V[i, j] = aIxI_sets[j].dot(WaJv_sets[i]) \
+                           + aJvW_sets[i].dot(aIxI_sets[j])
+    return logder_V
+
 def calc_aI(state, Q, K, V, W):
     xlist = state.reshape(Nc, L)
 
@@ -37,7 +58,7 @@ def calc_aI(state, Q, K, V, W):
     coeff = vtilde.T @ W @ vtilde 
     return alist, z, coeff
 
-N = 12
+N = 6
 L = 2
 Nc = N // L
 
@@ -93,27 +114,35 @@ Kder2 = np.tensordot(W, daI_dK_v, axes=(1, 0))
 Kder2 = np.tensordot(aJv, Kder2, axes=(0, 0))
 Kder = Kder1 + Kder2
 
+Vder = calc_dV(aI, xlist, V, W)
+
 manDerQ = np.zeros((L, L), dtype=complex)
 manDerK = np.zeros((L, L), dtype=complex)
+manDerV = np.zeros((L, L), dtype=complex)
 
-D = 1e-4 + 1e-4j
+D = 1e-5 + 1e-5j
 for k in range(L):
     for l in range(L):
         Q1 = Q.copy()
         K1 = K.copy()
+        V1 = V.copy()
 
         Q1[k, l] += D
         K1[k, l] += D
+        V1[k, l] += D
 
         coeffQ = calc_aI(state, Q1, K, V, W)[-1]
         coeffK = calc_aI(state, Q, K1, V, W)[-1]
+        coeffV = calc_aI(state, Q, K, V1, W)[-1]
 
         manDerQ[k, l] = (coeffQ - coeff) / D
         manDerK[k, l] = (coeffK - coeff) / D
-
+        manDerV[k, l] = (coeffV - coeff) / D
 
 print(spla.norm(manDerQ - Qder))
 print(spla.norm(manDerK - Kder))
+print(spla.norm(manDerV - Vder))
+
 
 
 
