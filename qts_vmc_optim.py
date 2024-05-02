@@ -324,7 +324,7 @@ def get_E_QKVW_MC_SR(Nsample, Q,K,V,W, MARSHALL_SIGN, L2_1, L2_2):
 
 
 def get_fname(lam1,lam2,MARSHALL_SIGN, L2_1, L2_2, N, L, Nmc, num):
-    return '_N=%i_L=%i_SIGN=%i_Nmc=%i'%(N,L,MARSHALL_SIGN,Nmc) + '_lam=(' \
+    return 'N=%i_L=%i_SIGN=%i_Nmc=%i'%(N,L,MARSHALL_SIGN,Nmc) + '_lam=(' \
         +"{:.0e}".format(lam1) + ', ' + "{:.0e}".format(lam2) +')' + \
          'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +')_%i'%num
 
@@ -388,28 +388,23 @@ if 1:
             W += W1/10
             V += V1/10
         EE.append(E)
-        
+
+    t1 = time.time()
+    t = t1-t0
+    t = t/60/60
+    
     pl.figure()
     pl.plot(np.real(EE), label='Nmc=%i'%Nmc)
-    if MARSHALL_SIGN:
-        pl.title('Monte Carlo SR \n psi(Q,K,V,W) \n \
-                  Rotated Marshall sign (-) \n Nmc=%i \n  lam1=%.3f \n lam2=%.3f \n \
-                      '%(Nmc, lam1,lam2) +'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +')' )
-    else:
-        pl.title('Monte Carlo SR \n psi(Q,K,V,W) \n \
-                  Unrotated Marshall sign (+) \n Nmc=%i \n  lam1=%.3f \n lam2=%.3f \n \
-                      '%(Nmc, lam1,lam2) +'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +')' )
+    
     pl.ylabel('Energy')
     pl.xlabel('Iteration')
     pl.hlines(E0, 0, len(EE), color='r', linestyles='--', label='E=%.4f (N=%i)'%(E0,N))
     pl.legend()
-    # pl.savefig('data/001a_N=%i_Nmc=%i_lam1=%.3f_lam2=%.3f'%(N,Nmc,lam1,lam2) +\
-    #            'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +').png')
-    # pl.show()
     fname = get_fname(lam1,lam2,MARSHALL_SIGN,L2_1,L2_2,N,L,Nmc,num)
-    fig_name = 'data/qts_vmc_optim' + fname + '.png'
+    pl.title('lam1=%.3f, lam2=%.3f \nRuntime: %.2f hrs'%(lam1,lam2, t))
+    fig_name = 'data/' + fname + '.png'
     pl.savefig(fig_name)
-    fname = 'data/qts_vmc_optim' + fname + '.txt'
+    fname = 'data/' + fname + '.txt'
     np.savetxt(fname, EE)
     
     
