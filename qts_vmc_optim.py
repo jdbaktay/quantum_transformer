@@ -338,10 +338,13 @@ else:
     
 L = 2
 
-Q = np.random.rand(L,L) + 1j*np.random.rand(L,L)
-K = np.random.rand(L,L) + 1j*np.random.rand(L,L)
-W = np.random.rand(N,N) + 1j*np.random.rand(N,N)
-V = np.random.rand(L,L) + 1j*np.random.rand(L,L)
+#Q = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+#K = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+V = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+W = np.random.uniform(low=-1, high=1, size=(N,N)) + 1j*np.random.uniform(low=-1, high=1, size=(N,N))
+
+Q = np.random.uniform(low=-1, high=1, size=(L,L)) 
+K = np.random.uniform(low=-1, high=1, size=(L,L)) 
 
 num = 0
 
@@ -373,6 +376,17 @@ if 1:
             print('\n gradV = \n ', gradV)
             print('\n gradW = \n ', gradW)
             break
+        if i %150 == 0:
+            #Q1 = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+            #K1 = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+            V1 = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+            W1 = np.random.uniform(low=-1, high=1, size=(N,N)) + 1j*np.random.uniform(low=-1, high=1, size=(N,N))
+            Q1 = np.random.uniform(low=-1, high=1, size=(L,L)) 
+            K1 = np.random.uniform(low=-1, high=1, size=(L,L))
+            Q += Q1/10
+            K += K1/10
+            W += W1/10
+            V += V1/10
         EE.append(E)
         
     pl.figure()
