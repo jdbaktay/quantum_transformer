@@ -107,27 +107,32 @@ def get_logderQK_josh(state, Q,K,V,W, aI, z):
     
     return Qder, Kder
 
-def get_logderV(state, Q,K,V,W,alist):
+def get_logderV(state, aI, V, W):
+    # dtype=complex
     N = len(W[:,0])
-    L = len(Q[:,0])
+    L = len(V[:,0])
     Nc = N//L
     xlist = state.reshape(Nc, L)
     
-    OV = np.zeros((L,L), dtype=complex)
+    aJv = (aI[:, np.newaxis] * np.matmul(xlist, V.T)).reshape(N)
+
+    reorder = list(range(0, N, 2)) + list(range(1, N, 2))
+
+    aIxI = (aI[:, np.newaxis] * xlist).reshape(N)[reorder]
+
+    WaJv = (W @ aJv)[reorder]
+    aJvW = (aJv @ W)[reorder]
+
+    WaJv_sets = [WaJv[:N//2], WaJv[N//2:]] # evens, odds
+    aJvW_sets = [aJvW[:N//2], aJvW[N//2:]] # evens, odds
+    aIxI_sets = [aIxI[:N//2], aIxI[N//2:]] # evens, odds
+
+    logder_V = np.zeros((L, L), dtype=complex)
     for i in range(L):
         for j in range(L):
-            for I in range(Nc):
-                for J in range(Nc):
-                    aI = alist[I]
-                    aJ = alist[J]
-                    xI = xlist[I]
-                    xJ = xlist[J]
-                    vI = V@xI
-                    vJ = V@xJ
-                    for k in range(L):
-                        OV[i,j] += aI*xI[j]*W[int(I*L+i), int(J*L+k)]*aJ*vJ[k] \
-                            + aI*vI[k]*W[int(I*L+k),int(J*L+i)]*aJ*xJ[j]
-    return OV
+            logder_V[i, j] = aIxI_sets[j].dot(WaJv_sets[i]) \
+                           + aJvW_sets[i].dot(aIxI_sets[j])
+    return logder_V
 
 def get_eL(state, coeff, Q,K,V,W, MARSHALL_SIGN):
     N = len(state)
@@ -214,7 +219,7 @@ def get_E_QKVW_MC_SR(Nsample, Q,K,V,W, MARSHALL_SIGN, L2_1, L2_2):
         
         tmp_logder_Q, tmp_logder_K = get_logderQK_josh(state, Q,K,V,W, aI, z)
         tmp_logder_W = np.outer(vtilde, vtilde)
-        tmp_logder_V = get_logderV(state, Q,K,V,W,aI)
+        tmp_logder_V = get_logderV(state, aI, V, W)
         
         energy_sum += tmp_energy 
         
