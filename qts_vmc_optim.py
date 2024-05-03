@@ -363,6 +363,8 @@ if 1:
     L2_2 = 1e-3
     for i in range(100):
         E, gradQ, gradK, gradV, gradW = get_E_QKVW_MC_SR(Nmc, Q,K,V,W,MARSHALL_SIGN, L2_1, L2_2)
+        gradQ = np.real(gradQ)
+        gradK = np.real(gradK)
         W = W -lam1 * gradW
         V = V -lam2 * gradV
         Q = Q -lam2 * gradQ
