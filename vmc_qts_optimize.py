@@ -315,10 +315,10 @@ def get_fname(lam1,lam2, L2_1, L2_2, N, L, Nmc, num):
 
  
 def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
-    Q = np.random.rand(L, L) + 1j * np.random.rand(L, L)
-    K = np.random.rand(L, L) + 1j * np.random.rand(L, L)
-    W = np.random.rand(N, N) + 1j * np.random.rand(N, N)
-    V = np.random.rand(L, L) + 1j * np.random.rand(L, L)
+    V = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+    W = np.random.uniform(low=-1, high=1, size=(N,N)) + 1j*np.random.uniform(low=-1, high=1, size=(N,N))
+    Q = np.random.uniform(low=-1, high=1, size=(L,L)) 
+    K = np.random.uniform(low=-1, high=1, size=(L,L)) 
     
     if N == 12:
         E0 =  -5.387389791340218 # right answer for N=12
@@ -329,11 +329,12 @@ def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
         
     for i in range(Nop):
         E, gradQ, gradK, gradV, gradW = get_E_QKVW_MC_SR(Nmc, Q,K,V,W,MARSHALL_SIGN, L2_1, L2_2)
-
-        W = W - lam1 * gradW
-        V = V - lam2 * gradV
-        Q = Q - lam2 * gradQ
-        K = K - lam2 * gradK
+        gradQ = np.real(gradQ)
+        gradK = np.real(gradK)
+        W = W -lam1 * gradW
+        V = V -lam2 * gradV
+        Q = Q -lam2 * gradQ
+        K = K -lam2 * gradK
 
         print('i = ', i, '\t E= ',E)
         
@@ -345,12 +346,22 @@ def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
             print('\n gradW = \n ', gradW)
             break
             return
+        if i%150 == 0:
+            # Q1 = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+            # K1 = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+            V1 = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
+            W1 = np.random.uniform(low=-1, high=1, size=(N,N)) + 1j*np.random.uniform(low=-1, high=1, size=(N,N))
+            Q1 = np.random.uniform(low=-1, high=1, size=(L,L)) 
+            K1 = np.random.uniform(low=-1, high=1, size=(L,L)) 
+            Q += Q1/10
+            K += K1/10
+            W += W1/10
+            V += V1/10
 
         EE.append(E)
         
     pl.figure()
     pl.plot(np.real(EE), label='Nmc=%i'%Nmc)
-
 
     pl.ylabel('Energy')
     pl.xlabel('Iteration')
