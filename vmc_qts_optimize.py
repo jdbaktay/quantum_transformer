@@ -308,17 +308,25 @@ def get_E_QKVW_MC_SR(Nsample, Q, K, V, W, MARSHALL_SIGN, L2_1, L2_2):
     deriv_K = deriv_K.reshape((L, L))
     return energy_sum, deriv_Q, deriv_K, deriv_V, deriv_W
 
-def get_fname(lam1,lam2,MARSHALL_SIGN, L2_1, L2_2, N, L, Nmc, num):
-    return '_N=%i_L=%i_SIGN=%i_Nmc=%i'%(N,L,MARSHALL_SIGN,Nmc) + '_lam=(' \
+def get_fname(lam1,lam2, L2_1, L2_2, N, L, Nmc, num):
+    return 'N=%i_L=%i'%(N,L) + '_lam=(' \
         +"{:.0e}".format(lam1) + ', ' + "{:.0e}".format(lam2) +')' + \
-         'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +')_%i'%num
+         'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +')_%i'%num+ '_Nmc=%i_'%Nmc + '%i'%num
+
  
-def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N,E0, L, Nop, Nmc, num):
+def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
     Q = np.random.rand(L, L) + 1j * np.random.rand(L, L)
     K = np.random.rand(L, L) + 1j * np.random.rand(L, L)
     W = np.random.rand(N, N) + 1j * np.random.rand(N, N)
     V = np.random.rand(L, L) + 1j * np.random.rand(L, L)
-
+    
+    if N == 12:
+        E0 =  -5.387389791340218 # right answer for N=12
+    elif N == 8: 
+        E0 = -3.6510934089371783 # right answer for N=8
+    else:
+        E0 = -0.4438 * N
+        
     for i in range(Nop):
         E, gradQ, gradK, gradV, gradW = get_E_QKVW_MC_SR(Nmc, Q,K,V,W,MARSHALL_SIGN, L2_1, L2_2)
 
@@ -343,26 +351,18 @@ def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N,E0, L, Nop, Nmc, num):
     pl.figure()
     pl.plot(np.real(EE), label='Nmc=%i'%Nmc)
 
-    if MARSHALL_SIGN:
-        pl.title('Monte Carlo SR \n psi(Q,K,V,W) \n \
-                  Rotated Marshall sign (-) \n Nmc=%i \n  lam1=%.3f \n lam2=%.3f \n \
-                      '%(Nmc, lam1,lam2) +'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +')' )
-    else:
-        pl.title('Monte Carlo SR \n psi(Q,K,V,W) \n \
-                  Unrotated Marshall sign (+) \n Nmc=%i \n  lam1=%.3f \n lam2=%.3f \n \
-                      '%(Nmc, lam1,lam2) +'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +')' )
 
     pl.ylabel('Energy')
     pl.xlabel('Iteration')
     pl.hlines(E0, 0, len(EE), color='r', linestyles='--', label='E=%.4f (N=%i)'%(E0,N))
     pl.legend()
 
-    fname = get_fname(lam1,lam2,MARSHALL_SIGN,l21,l22,N,L,Nmc,num)
-
-    fig_name = 'data/_FIG_001b.1' + fname + '.png'
+    fname = get_fname(lam1,lam2,l21,l22,N,L,Nmc,num)
+    pl.title(fname)
+    fig_name = 'data/' + fname + '.png'
     pl.savefig(fig_name)
 
-    fname = 'data/001b.1' + fname + '.txt'
+    fname = 'data/' + fname + '.txt'
     np.savetxt(fname, EE)
     
 lam1 = float(sys.argv[1])
@@ -380,9 +380,8 @@ Nmc = 500
 nop = 1000
 L = 2
 
-E0 = -5.387389791340218 # energy for N=12
 
-optimize(lam1, lam2, MARSHALL_SIGN, L2_1, L2_2, N,E0, L, nop, Nmc, num)
+optimize(lam1, lam2, MARSHALL_SIGN, L2_1, L2_2, N, L, nop, Nmc, num)
 
 t=time.time()
 print('\nRuntime:',(t-t0))
