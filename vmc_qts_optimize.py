@@ -369,7 +369,11 @@ def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
     pl.legend()
 
     fname = get_fname(lam1,lam2,l21,l22,N,L,Nmc,num)
-    pl.title(fname)
+    t1=time.time()
+    t=t1-t0
+    t = t/60/60
+    pl.title('lam1=%.3f, lam2=%.3f \nRuntime: %.2f hrs'%(lam1,lam2, t))
+    
     fig_name = 'data/' + fname + '.png'
     pl.savefig(fig_name)
 
