@@ -11,6 +11,7 @@ config.update("jax_enable_x64", True)
 t0 = time.time()
 
 def calc_dQdK(aI, zII, zIJ, xI, xlist, Q, K):
+    L = len(Q[0,:])
     Qterm1 = -aI * np.outer(K @ xI, xI)
     Kterm1 = -aI * np.outer(Q @ xI, xI)
 
@@ -24,6 +25,9 @@ def calc_dQdK(aI, zII, zIJ, xI, xlist, Q, K):
     return Qder, Kder
 
 def calc_aI(state, Q, K, V, W):
+    N = len(W[0,:])
+    L = len(Q[0,:])
+    Nc = N // L
     xlist = state.reshape(Nc, L)
 
     Qx = np.matmul(xlist, Q.T)
@@ -44,6 +48,10 @@ def calc_aI(state, Q, K, V, W):
     return alist, z
 
 def get_logders(state, Q, K, V, W):
+    N = len(W[0,:])
+    L = len(Q[0,:])
+    Nc = N // L
+    
     xlist = state.reshape(Nc, L)
 
     aI, z = calc_aI(state, Q, K, V, W)
@@ -113,6 +121,10 @@ def get_logders(state, Q, K, V, W):
     return tmp_logder_Q, tmp_logder_K, tmp_logder_V, tmp_logder_W
 
 def get_coeff_2(state, Q, K, V, W):
+    N = len(W[0,:])
+    L = len(Q[0,:])
+    Nc = N // L
+    
     xlist = state.reshape(Nc, L)
 
     Qx = np.matmul(xlist, Q.T)
