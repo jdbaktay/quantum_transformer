@@ -1,12 +1,12 @@
-import jax.numpy as jnp
-import jax
+#import jax.numpy as jnp
+#import jax
 import time
 import math
 import numpy as np
 from numpy import exp, sqrt
 from matplotlib import pyplot as pl
-from jax import config
-config.update("jax_enable_x64", True) 
+#from jax import config
+#config.update("jax_enable_x64", True) 
 
 t0 = time.time()
 
@@ -144,7 +144,7 @@ def get_coeff_2(state, Q, K, V, W):
         alist[I] = num / denom
 
     vtilde = (alist[:, np.newaxis] * Vx).reshape(N) 
-    return jnp.exp(vtilde.T @ W @ vtilde)
+    return np.exp(vtilde.T @ W @ vtilde)
 
 def get_eL(state, coeff, Q,K,V,W, MARSHALL_SIGN):
     N = len(state)
@@ -222,7 +222,7 @@ def get_E_QKVW_MC_SR(Nsample, Q, K, V, W, MARSHALL_SIGN, L2_1, L2_2):
             coeff = get_coeff_2(state, Q, K, V, W)
             coeff_new = get_coeff_2(new_state, Q, K, V, W)
             
-            if (np.random.random() < min(1.0, jnp.abs(coeff_new / coeff))):
+            if (np.random.random() < min(1.0, np.abs(coeff_new / coeff)**2)):
                 state = new_state.copy()
                 coeff = coeff_new
             
