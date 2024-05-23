@@ -3,6 +3,7 @@ import jax
 import time
 import math
 import numpy as np
+import sys
 from numpy import exp, sqrt
 from matplotlib import pyplot as pl
 from jax import config
@@ -367,6 +368,7 @@ L2_2 = 1e-2
 Nmc = 500
 nop = 1000
 L = 2
+Nc = N // L
 
 E0 = -5.387389791340218 # energy for N=12
 
