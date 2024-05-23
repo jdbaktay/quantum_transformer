@@ -1,13 +1,8 @@
-#import jax.numpy as jnp
-#import jax
 import time
 import math
 import numpy as np
-import sys
 from numpy import exp, sqrt
 from matplotlib import pyplot as pl
-#from jax import config
-#config.update("jax_enable_x64", True) 
 
 t0 = time.time()
 
@@ -121,7 +116,7 @@ def get_logders(state, Q, K, V, W):
                                + aJvW_sets[i].dot(aIxI_sets[j])
     return tmp_logder_Q, tmp_logder_K, tmp_logder_V, tmp_logder_W
 
-def get_coeff_2(state, Q, K, V, W):
+def get_coeff(state, Q, K, V, W):
     N = len(W[0,:])
     L = len(Q[0,:])
     Nc = N // L
@@ -147,26 +142,269 @@ def get_coeff_2(state, Q, K, V, W):
     vtilde = (alist[:, np.newaxis] * Vx).reshape(N) 
     return np.exp(vtilde.T @ W @ vtilde)
 
-def get_eL(state, coeff, Q,K,V,W, MARSHALL_SIGN):
+
+
+def IBITS(n,i):
+    return ((n >> i) & 1)
+
+def _int_to_state2(integer, N):
+    state = np.ones(N)
+    for bit in range(N):
+        if IBITS(integer,bit) == 0:
+            state[bit] = 0
+    return state
+
+
+def _state_to_int(state, N):
+    # x = (state+np.ones(N)*0.5)
+    x=state
+    x = x.astype('int')
+    return int(''.join(map(str,x[::-1])),base=2 )
+
+def rotate(state, n):
+    return np.concatenate((state[n:], state[:n]))
+
+
+def spin_flip(state, si_dupes):
+    N = len(state)
+    symm = 0
+    # print(s,'\t',si)
+    # print('\n si_dupes: \n', si_dupes)
+    x = np.random.randint(low=0,high=N)
+    y=x
+    while(state[y]*state[x] > 0):
+        y = np.random.randint(low=0,high=N)
+    new_state = state.copy()
+    new_state[x] *= -1
+    new_state[y] *= -1
+
+    ns = new_state + np.ones(N)*0.5
+    nsi = _state_to_int(ns, N)
+    # print(ns,'\t', nsi )
+
+    nsi_dupes = []
+    for r in range(N):
+        nsr = rotate(ns, r)
+        nsri = _state_to_int(nsr, N)
+        # print('\t', nsr, '\t', nsri)
+        # if n
+        if nsri not in nsi_dupes:
+            nsi_dupes.append(nsri)
+        if nsri in si_dupes:
+            # print('DUPLICATE!')
+            symm = 1
+    
+    if symm == 1:
+        # print('NOT ACCEPTED')
+        return spin_flip(state, si_dupes)
+    elif symm == 0:
+        nsi = min(nsi_dupes)
+        new_state = _int_to_state2(nsi, N) - np.ones(N)*0.5
+        return new_state, nsi,  nsi_dupes
+    
+def get_Tr_states(state):
+    N = len(state)
+    s = state+ np.ones(N)*0.5
+    si = _state_to_int(s, N)
+    si_dupes = []
+    for r in range(N):
+        sr = rotate(s, r)
+        sri = _state_to_int(sr, N)
+        if sri not in si_dupes:
+            si_dupes.append(sri)
+    return si_dupes
+
+def get_eL(state, si, si_dupes, Q,K,V,W):
+    ''' state will be passed in the form of |n>, a spin configuration 
+    +/-1/2 corresponding to the lowest integer of all symmetric states'''
     N = len(state)
     E1 = 0
     E2 = 0
-    for i in range(N):
-        E1 += state[i]*state[(i+1)%N]
+    
+    k = 0
+    
+    s = state+ np.ones(N)*0.5
+    si = _state_to_int(s, N)
+    phase_s = 0
+    mult_s = 0
+    for r in range(N):
+        sr = rotate(s, r)
+        sri = _state_to_int(sr, N)
+        if sri == si:
+            phase_s += np.exp(1j*k*r)
+            mult_s += 1
+    mn = phase_s / np.sqrt(N*mult_s)
+    
+    for r in range(N):
+        if state[r] * state[(r+1)%N] < 0:
+            fstate = state.copy()
+            fstate[r] *= -1
+            fstate[(r+1)%N] *= -1
+            fs = fstate + np.ones(N)*0.5
+            fsi = _state_to_int(fs, N)
 
-        if (state[i]*state[(i+1)%N] < 0):
-            state_new = state.copy()
-            state_new[i] *= -1
-            state_new[(i+1)%N] *= -1
-            
-            coeff_new = get_coeff_2(state_new, Q,K,V,W)
-            
-            E2 += coeff_new / coeff
+            # manual get_Tr_states for fstate
+            fsi_dupes = []
+            phase_fs = 0
+            mult_fs = 0
+            for r in range(N):
+                fsr = rotate(fs, r)
+                fsri = _state_to_int(fsr, N)
+                if fsri == fsi:
+                    phase_fs += np.exp(1j*k*r)
+                    mult_fs += 1
+                
+                if fsri not in fsi_dupes:
+                    fsi_dupes.append(fsri)
+            fsi_rep = min(fsi_dupes)
+            mnr = phase_fs / np.sqrt(N*mult_fs)
+            fstate = _int_to_state2(fsi_rep, N) - np.ones(N)*0.5
+            c = get_coeff(fstate,Q,K,V,W)
+            E2 += mnr/mn * 1/2 * c
+    return E1 + E2
 
-    if MARSHALL_SIGN:
-        return E1 - 0.5 * E2
-    else:
-        return E1 + 0.5 * E2
+
+def metro(Nsample, Q, K,V,W):
+    N = len(W[0,:])
+    L = len(Q[0,:])
+    
+    dtype=np.cfloat
+    
+    logder_W_sum = np.zeros((N,N), dtype= dtype)
+    HO_W_sum = np.zeros((N,N), dtype= dtype)
+    flat_logder_W_sum = np.zeros(N**2, dtype= dtype)
+    logder_outer_W_sum = np.zeros((N**2, N**2), dtype= dtype)
+    
+    logder_V_sum = np.zeros((L,L), dtype= dtype)
+    HO_V_sum = np.zeros((L,L), dtype= dtype)
+    flat_logder_V_sum = np.zeros(L**2, dtype= dtype)
+    logder_outer_V_sum = np.zeros((L**2, L**2), dtype= dtype)
+    
+    logder_Q_sum = np.zeros((L,L), dtype= dtype)
+    HO_Q_sum = np.zeros((L,L), dtype= dtype)
+    flat_logder_Q_sum = np.zeros(L**2, dtype= dtype)
+    logder_outer_Q_sum = np.zeros((L**2, L**2), dtype= dtype)
+    
+    logder_K_sum = np.zeros((L,L), dtype= dtype)
+    HO_K_sum = np.zeros((L,L), dtype= dtype)
+    flat_logder_K_sum = np.zeros(L**2, dtype= dtype)
+    logder_outer_K_sum = np.zeros((L**2, L**2), dtype= dtype)
+    
+    energy_sum = 0
+    
+    state = np.ones(N)
+    state[:N//2] = -1
+    state *= 0.5
+    state = state[np.random.permutation(N)]
+    si_dupes = get_Tr_states(state)
+    si = min(si_dupes)
+    state = _int_to_state2(si, N) - np.ones(N)*0.5
+    EE = []
+    nacc = 0
+    Nskip = 1
+    for i in range(Nsample):
+        for j in range(Nskip):
+            coeff = get_coeff(state, Q, K, V, W) # gets <psi0|n >
+            new_state, nsi, nsi_dupes = spin_flip(state, si_dupes)
+            coeff_new = get_coeff(new_state, Q, K, V, W)
+            if (np.random.random() < min(1.0, np.abs(coeff_new / coeff)**2)):
+                state = new_state.copy()
+                coeff = coeff_new
+                si_dupes = nsi_dupes.copy()
+                si = nsi
+                nacc += 1
+                
+        tmp_energy = get_eL(state, si, si_dupes, Q,K,V,W)
+        tmp_logder_Q, tmp_logder_K, tmp_logder_V, tmp_logder_W \
+                                            = get_logders(state, Q, K, V, W)
+
+        energy_sum += tmp_energy 
+        
+        flat_logder_W_sum += tmp_logder_W.flatten() 
+        logder_outer_W_sum += \
+            np.outer(np.conj(tmp_logder_W.flatten()), tmp_logder_W.flatten()) 
+        tmp_logder_W = np.conj(tmp_logder_W)
+        logder_W_sum += tmp_logder_W 
+        HO_W_sum += tmp_logder_W * tmp_energy 
+        
+        flat_logder_V_sum += tmp_logder_V.flatten() 
+        logder_outer_V_sum += \
+            np.outer(np.conj(tmp_logder_V.flatten()), tmp_logder_V.flatten()) 
+        tmp_logder_V = np.conj(tmp_logder_V)
+        logder_V_sum += tmp_logder_V 
+        HO_V_sum += tmp_logder_V * tmp_energy 
+        
+        flat_logder_Q_sum += tmp_logder_Q.flatten() 
+        logder_outer_Q_sum += \
+            np.outer(np.conj(tmp_logder_Q.flatten()), tmp_logder_Q.flatten()) 
+        tmp_logder_Q = np.conj(tmp_logder_Q)
+        logder_Q_sum += tmp_logder_Q 
+        HO_Q_sum += tmp_logder_Q * tmp_energy 
+        
+        flat_logder_K_sum += tmp_logder_K.flatten() 
+        logder_outer_K_sum += \
+            np.outer(np.conj(tmp_logder_K.flatten()), tmp_logder_K.flatten()) 
+        tmp_logder_K = np.conj(tmp_logder_K)
+        logder_K_sum += tmp_logder_K 
+        HO_K_sum += tmp_logder_K * tmp_energy 
+        
+        EE.append(energy_sum/(i+1))
+        
+    energy_sum /= Nsample
+    
+    logder_W_sum /= Nsample
+    HO_W_sum /= Nsample
+    flat_logder_W_sum /= Nsample
+    logder_outer_W_sum /= Nsample
+    logder_outer_W_sum -= np.outer(np.conj(flat_logder_W_sum), flat_logder_W_sum)
+    gradient_W = 2 * (HO_W_sum - logder_W_sum * energy_sum)
+    grad_para_W = gradient_W.flatten()
+    logder_outer_W_sum += np.eye(N**2) * 1e-3
+    deriv_W = np.linalg.solve(logder_outer_W_sum, grad_para_W)
+    deriv_W = deriv_W.reshape((N, N))
+    
+    logder_V_sum /= Nsample
+    HO_V_sum /= Nsample
+    flat_logder_V_sum /= Nsample
+    logder_outer_V_sum /= Nsample
+    logder_outer_V_sum -= np.outer(np.conj(flat_logder_V_sum), flat_logder_V_sum)
+    gradient_V = 2 * (HO_V_sum - logder_V_sum * energy_sum)
+    grad_para_V = gradient_V.flatten()
+    logder_outer_V_sum += np.eye(L**2) * 1e-3
+    deriv_V = np.linalg.solve(logder_outer_V_sum, grad_para_V)
+    deriv_V = deriv_V.reshape((L, L))
+    
+    logder_Q_sum /= Nsample
+    HO_Q_sum /= Nsample
+    flat_logder_Q_sum /= Nsample
+    logder_outer_Q_sum /= Nsample
+    logder_outer_Q_sum -= np.outer(np.conj(flat_logder_Q_sum), flat_logder_Q_sum)
+    gradient_Q = 2 * (HO_Q_sum - logder_Q_sum * energy_sum)
+    grad_para_Q = gradient_Q.flatten()
+    logder_outer_Q_sum += np.eye(L**2) * 1e-3
+    deriv_Q = np.linalg.solve(logder_outer_Q_sum, grad_para_Q)
+    deriv_Q = deriv_Q.reshape((L, L))
+    
+    logder_K_sum /= Nsample
+    HO_K_sum /= Nsample
+    flat_logder_K_sum /= Nsample
+    logder_outer_K_sum /= Nsample
+    logder_outer_K_sum -= np.outer(np.conj(flat_logder_K_sum), flat_logder_K_sum)
+    gradient_K = 2 * (HO_K_sum - logder_K_sum * energy_sum)
+    grad_para_K = gradient_K.flatten()
+    logder_outer_K_sum += np.eye(L**2) * 1e-3
+    deriv_K = np.linalg.solve(logder_outer_K_sum, grad_para_K)
+    deriv_K = deriv_K.reshape((L, L))
+    
+    if 0:
+        pl.figure()
+        pl.plot(EE)
+        pl.show()
+    print('acceptance ratio = ', nacc/Nsample/Nskip)
+    return energy_sum, deriv_Q, deriv_K, deriv_V, deriv_W
+
+print('\n##############\n')
+
 
 def get_E_QKVW_MC_SR(Nsample, Q, K, V, W, MARSHALL_SIGN, L2_1, L2_2):
     N = len(W[0,:])
@@ -174,14 +412,7 @@ def get_E_QKVW_MC_SR(Nsample, Q, K, V, W, MARSHALL_SIGN, L2_1, L2_2):
 
     energy_sum = 0.0
     
-    if np.iscomplex(W).any():
-        COMPLEX = 1
-    else:
-        COMPLEX = 0
-        
-    dtype = 'float64'
-    if COMPLEX:
-        dtype = 'complex128'
+    dtype=np.cfloat
     
     logder_W_sum = np.zeros((N,N), dtype= dtype)
     HO_W_sum = np.zeros((N,N), dtype= dtype)
@@ -220,8 +451,8 @@ def get_E_QKVW_MC_SR(Nsample, Q, K, V, W, MARSHALL_SIGN, L2_1, L2_2):
             new_state[x] *= -1
             new_state[y] *= -1
             
-            coeff = get_coeff_2(state, Q, K, V, W)
-            coeff_new = get_coeff_2(new_state, Q, K, V, W)
+            coeff = get_coeff(state, Q, K, V, W)
+            coeff_new = get_coeff(new_state, Q, K, V, W)
             
             if (np.random.random() < min(1.0, np.abs(coeff_new / coeff)**2)):
                 state = new_state.copy()
@@ -314,7 +545,6 @@ def get_fname(lam1,lam2, L2_1, L2_2, N, L, Nmc, num):
         +"{:.0e}".format(lam1) + ', ' + "{:.0e}".format(lam2) +')' + \
          'L2=('+"{:.0e}".format(L2_1) + ', ' + "{:.0e}".format(L2_2) +')_%i'%num+ '_Nmc=%i_'%Nmc + '%i'%num
 
- 
 def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
     V = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
     W = np.random.uniform(low=-1, high=1, size=(N,N)) + 1j*np.random.uniform(low=-1, high=1, size=(N,N))
@@ -328,7 +558,7 @@ def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
     else:
         E0 = -0.4438 * N
         
-    for i in range(Nop):
+    for i in range(Nop):     
         E, gradQ, gradK, gradV, gradW = get_E_QKVW_MC_SR(Nmc, Q,K,V,W,MARSHALL_SIGN, L2_1, L2_2)
         gradQ = np.real(gradQ)
         gradK = np.real(gradK)
@@ -346,7 +576,6 @@ def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
             print('\n gradV = \n ', gradV)
             print('\n gradW = \n ', gradW)
             break
-            return
         if i%150 == 0:
             # Q1 = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
             # K1 = np.random.uniform(low=-1, high=1, size=(L,L)) + 1j*np.random.uniform(low=-1, high=1, size=(L,L))
@@ -364,44 +593,57 @@ def optimize( lam1, lam2, MARSHALL_SIGN, l21, l22, N, L, Nop, Nmc, num):
     pl.figure()
     pl.plot(np.real(EE), label='Nmc=%i'%Nmc)
 
+
     pl.ylabel('Energy')
     pl.xlabel('Iteration')
     pl.hlines(E0, 0, len(EE), color='r', linestyles='--', label='E=%.4f (N=%i)'%(E0,N))
     pl.legend()
 
     fname = get_fname(lam1,lam2,l21,l22,N,L,Nmc,num)
+    
     t1=time.time()
     t=t1-t0
     t = t/60/60
-    pl.title('lam1=%.3f, lam2=%.3f \nRuntime: %.2f hrs'%(lam1,lam2, t))
     
+    pl.title('lam1=%.3f, lam2=%.3f \nRuntime: %.2f hrs'%(lam1,lam2, t))
     fig_name = 'data/' + fname + '.png'
     pl.savefig(fig_name)
 
     fname = 'data/' + fname + '.txt'
     np.savetxt(fname, EE)
     
-lam1 = float(sys.argv[1])
-lam2 = float(sys.argv[2])
-N = int(sys.argv[3])
-num = int(sys.argv[4])
+# lam1 = float(sys.argv[1])
+# lam2 = float(sys.argv[2])
+# N = int(sys.argv[3])
+# num = int(sys.argv[4])
+
 
 EE = []
-MARSHALL_SIGN = 0
+lam1 = 0.01
+lam2 = 0.01
 
 L2_1 = 1e-3
-L2_2 = 1e-2
+L2_2 = 1e-3
 
-Nmc = 500
-nop = 1000
+Nmc = 200
+nop = 50
+
+N = 8
 L = 2
-Nc = N // L
+
+MARSHALL_SIGN = 0 
+num = 0
 
 
-optimize(lam1, lam2, MARSHALL_SIGN, L2_1, L2_2, N, L, nop, Nmc, num)
+
+
+E, gradQ, gradK, gradV, gradW = get_E_QKVW_MC_SR(Nmc, Q,K,V,W,MARSHALL_SIGN, L2_1, L2_2)
+
+print('E = ', E)
+
+optimize(lam1, lam2, MARSHALL_SIGN, L2_1, L2_2, N,L, nop, Nmc, num)
+
+
 
 t=time.time()
 print('\nRuntime:',(t-t0))
-
-
-
