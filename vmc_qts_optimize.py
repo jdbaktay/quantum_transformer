@@ -11,6 +11,117 @@ config.update("jax_enable_x64", True)
 
 t0 = time.time()
 
+import numpy as np
+
+import numpy as np
+
+class SpinConfig:
+    def __init__(self, k, L, Q, K, V, W):
+        self.k = k
+        self.L = L
+        self.spin = np.random.choice([-0.5, 0.5], size=L)  
+        self.mult = 1
+        self.phase = 1
+        self.coefficient = self.Psi(self.spin, Q, K, V, W)
+
+    def translations(self, spins):
+        translations = [np.roll(spins, shift) for shift in range(self.L)]
+        return translations
+
+    def representative(self, spins):
+        new_spins = self.translations(spins)
+        rep = np.copy(spins)
+        mult = 0
+        iphase = 0j
+        ik = self.k * 2 * np.pi / self.L
+        ntras = 0
+        for tras in new_spins:
+            nequal = 0
+            for i in range(self.L):
+                if spins[i] == tras[i]:
+                    nequal += 1
+            if nequal == self.L:
+                mult += 1
+                iphase += np.exp(ik * ntras)
+            ntras += 1
+        for tras in new_spins:
+            for i in range(self.L):
+                if tras[i] < rep[i]:
+                    rep = np.copy(tras)
+                    break
+                elif rep[i] < tras[i]:
+                    break
+        if abs(iphase.real) < 1.e-10:
+            phase = 0
+        else:
+            phase = mult
+        return rep, mult, phase
+
+    def Psi(self, spins, Q, K, V, W):
+        state = spins
+
+        xlist = state.reshape(Nc, L)
+
+        Qx = np.matmul(xlist, Q.T)
+        Kx = np.matmul(xlist, K.T)
+        Vx = np.matmul(xlist, V.T)
+
+        z = np.matmul(Qx, Kx.T) / np.sqrt(L) 
+
+        alist = np.zeros(Nc, dtype=np.cfloat)
+        for I in range(Nc):
+            num = np.exp(-z[I,I])
+
+            denom = 0
+            for J in range(Nc):
+                denom += np.exp(-z[I,J])
+
+            alist[I] = num / denom
+
+        vtilde = (alist[:, np.newaxis] * Vx).reshape(N) 
+        return jnp.exp(vtilde.T @ W @ vtilde)
+
+    def metropolis_step(self):
+        found = False
+        rep = np.copy(self.spin)
+        mult = 1
+        phase = 1
+        i = int(np.random.random() * self.L)
+        j = int(np.random.random() * self.L)
+        while not found:
+            while self.spin[i] == self.spin[j]:
+                i = int(np.random.random() * self.L)
+                j = int(np.random.random() * self.L)
+            new_spins = np.copy(self.spin)
+            new_spins[i] *= -1
+            new_spins[j] *= -1
+            rep, mult, phase = self.representative(new_spins)
+
+            if phase != 0:
+                for n in range(self.L):
+                    if self.spin[n] != rep[n]:
+                        found = True
+                        break
+
+        p = (self.Psi(rep) / self.Psi(self.spin)) ** 2
+        p /= mult
+        if p >= 1 or np.random.random() < p:
+            self.spin = np.copy(rep)  # Update to the new state
+            self.mult = mult
+            self.phase = phase
+            self.coefficient = self.Psi(self.spin)  # Update coefficient
+            nchanges = 1
+        else:
+            nchanges = 0
+
+        return nchanges
+
+    def get_spin(self):
+        return self.spin
+
+    def get_coefficient(self):
+        return self.coefficient
+
 def calc_dQdK(aI, zII, zIJ, xI, xlist, Q, K):
     Qterm1 = -aI * np.outer(K @ xI, xI)
     Kterm1 = -aI * np.outer(Q @ xI, xI)
@@ -190,32 +301,17 @@ def get_E_QKVW_MC_SR(Nsample, Q, K, V, W, MARSHALL_SIGN, L2_1, L2_2):
     HO_K_sum = np.zeros((L,L), dtype= dtype)
     flat_logder_K_sum = np.zeros(L**2, dtype= dtype)
     logder_outer_K_sum = np.zeros((L**2, L**2), dtype= dtype)
+
+    k = 0
+    spin_config = SpinConfig(k, N, Q, K, V, W)
         
-    state = np.ones(N)
-    state[:N//2] = -1
-    state *= 0.5
-    state = state[np.random.permutation(N)]
-
     for i in range(Nsample):
-        for j in range(3):
-            x = np.random.randint(low=0, high=N)
-            y = x
-
-            while(state[y] * state[x] > 0):
-                y = np.random.randint(low=0, high=N)
-
-            new_state = state.copy()
-            new_state[x] *= -1
-            new_state[y] *= -1
+        for j in range(3): # need this loop?
+            nchanges = spin_config.metropolis_step()
+            state = spin_config.get_spin()
+            coeff = spin_config.get_coefficient()
             
-            coeff = get_coeff_2(state, Q, K, V, W)
-            coeff_new = get_coeff_2(new_state, Q, K, V, W)
-            
-            if (np.random.random() < min(1.0, jnp.abs(coeff_new / coeff))):
-                state = new_state.copy()
-                coeff = coeff_new
-            
-        tmp_energy = get_eL(state,coeff, Q, K, V, W, MARSHALL_SIGN)
+        tmp_energy = get_eL(state, coeff, Q, K, V, W, MARSHALL_SIGN)
              
         tmp_logder_Q, tmp_logder_K, tmp_logder_V, tmp_logder_W \
                                             = get_logders(state, Q, K, V, W)
