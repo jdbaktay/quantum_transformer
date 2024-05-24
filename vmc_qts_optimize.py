@@ -11,10 +11,6 @@ config.update("jax_enable_x64", True)
 
 t0 = time.time()
 
-import numpy as np
-
-import numpy as np
-
 class SpinConfig:
     def __init__(self, k, L, Q, K, V, W):
         self.k = k
@@ -81,21 +77,27 @@ class SpinConfig:
         vtilde = (alist[:, np.newaxis] * Vx).reshape(N) 
         return jnp.exp(vtilde.T @ W @ vtilde)
 
-    def metropolis_step(self):
+    def metropolis_step(self, Q, K, V, W):
         found = False
         rep = np.copy(self.spin)
+
         mult = 1
         phase = 1
         i = int(np.random.random() * self.L)
         j = int(np.random.random() * self.L)
+
         while not found:
             while self.spin[i] == self.spin[j]:
                 i = int(np.random.random() * self.L)
                 j = int(np.random.random() * self.L)
+
             new_spins = np.copy(self.spin)
             new_spins[i] *= -1
             new_spins[j] *= -1
+
             rep, mult, phase = self.representative(new_spins)
+
+            print(self.spin, new_spins, rep)
 
             if phase != 0:
                 for n in range(self.L):
@@ -103,13 +105,25 @@ class SpinConfig:
                         found = True
                         break
 
-        p = (self.Psi(rep) / self.Psi(self.spin)) ** 2
+                    ####################################################
+
+                    # Modification
+
+                    else:
+                        i = int(np.random.random() * self.L)
+                        j = int(np.random.random() * self.L)
+
+                    ####################################################
+
+
+        p = (self.Psi(rep, Q, K, V, W) / self.Psi(self.spin, Q, K, V, W)) ** 2
         p /= mult
+        
         if p >= 1 or np.random.random() < p:
             self.spin = np.copy(rep)  # Update to the new state
             self.mult = mult
             self.phase = phase
-            self.coefficient = self.Psi(self.spin)  # Update coefficient
+            self.coefficient = self.Psi(self.spin, Q, K, V, W)  # Update coefficient
             nchanges = 1
         else:
             nchanges = 0
@@ -306,10 +320,11 @@ def get_E_QKVW_MC_SR(Nsample, Q, K, V, W, MARSHALL_SIGN, L2_1, L2_2):
     spin_config = SpinConfig(k, N, Q, K, V, W)
         
     for i in range(Nsample):
-        for j in range(3): # need this loop?
-            nchanges = spin_config.metropolis_step()
-            state = spin_config.get_spin()
-            coeff = spin_config.get_coefficient()
+        print('i =', i)
+        # for j in range(3): # need this loop?
+        nchanges = spin_config.metropolis_step(Q, K, V, W)
+        state = spin_config.get_spin()
+        coeff = spin_config.get_coefficient()
             
         tmp_energy = get_eL(state, coeff, Q, K, V, W, MARSHALL_SIGN)
              
