@@ -4,6 +4,7 @@ import time
 import math
 import numpy as np
 import sys
+import itertools
 from numpy import exp, sqrt
 from matplotlib import pyplot as pl
 #from jax import config
@@ -103,16 +104,16 @@ def get_logders(state, Q, K, V, W):
 
     #################### logder_V ######################################
 
-    reorder = list(range(0, N, 2)) + list(range(1, N, 2))
+    reorder = [i*L + j for j, i in itertools.product(range(L), range(Nc))]
 
     aIxI = (aI[:, np.newaxis] * xlist).reshape(N)[reorder]
 
     WaJv = (W @ aJv)[reorder]
     aJvW = (aJv @ W)[reorder]
 
-    WaJv_sets = [WaJv[:N//2], WaJv[N//2:]] 
-    aJvW_sets = [aJvW[:N//2], aJvW[N//2:]] 
-    aIxI_sets = [aIxI[:N//2], aIxI[N//2:]]
+    WaJv_sets = [WaJv[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
+    aJvW_sets = [aJvW[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
+    aIxI_sets = [aIxI[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
 
     tmp_logder_V = np.zeros((L, L), dtype=complex)
     for i in range(L):
