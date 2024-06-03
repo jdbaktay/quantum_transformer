@@ -1,7 +1,8 @@
 import numpy as np
 import scipy.linalg as spla
+import itertools
 
-def get_logders(state, Q,K,V,W):
+def get_logders(state, Q, K, V, W):
     if np.iscomplex(W).any():
         COMPLEX = 1
     else:
@@ -97,12 +98,11 @@ def get_logders(state, Q,K,V,W):
                                                                   aI * daJdQ) * vI[k]*vJ[l]
                             OK[i,j] += W[int(I*L)+k,int(J*L+l)]*(daIdK* aJ + \
                                                                   aI* daJdK) * vI[k]*vJ[l]
-    # print()
-    logderW = np.outer(vtilde,vtilde)
+
+    logderW = np.outer(vtilde, vtilde)
     logderV = OV
     logderQ = OQ
     logderK = OK
-
     return logderQ, logderK, logderV, logderW
 
 def calc_dQdK(aI, zII, zIJ, xI, xlist, Q, K):
@@ -121,16 +121,16 @@ def calc_dQdK(aI, zII, zIJ, xI, xlist, Q, K):
 def calc_dV(aI, xlist, V, W):
     aJv = (aI[:, np.newaxis] * np.matmul(xlist, V.T)).reshape(N)
 
-    reorder = list(range(0, N, 2)) + list(range(1, N, 2))
+    reorder = [i*L + j for j, i in itertools.product(range(L), range(Nc))]
 
     aIxI = (aI[:, np.newaxis] * xlist).reshape(N)[reorder]
 
     WaJv = (W @ aJv)[reorder]
     aJvW = (aJv @ W)[reorder]
 
-    WaJv_sets = [WaJv[:N//2], WaJv[N//2:]] # evens, odds
-    aJvW_sets = [aJvW[:N//2], aJvW[N//2:]] # evens, odds
-    aIxI_sets = [aIxI[:N//2], aIxI[N//2:]] # evens, odds
+    WaJv_sets = [WaJv[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
+    aJvW_sets = [aJvW[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
+    aIxI_sets = [aIxI[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
 
     logder_V = np.zeros((L, L), dtype=complex)
     for i in range(L):
@@ -159,11 +159,12 @@ def calc_aI(state, Q, K, V, W):
         alist[I] = num / denom
 
     vtilde = (alist[:, np.newaxis] * Vx).reshape(N)
+
     coeff = vtilde.T @ W @ vtilde 
     return alist, z, coeff
 
 N = 12
-L = 2
+L = 4
 Nc = N // L
 
 W = np.random.rand(N, N) + 1j * np.random.rand(N, N)
@@ -223,6 +224,7 @@ Vder = calc_dV(aI, xlist, V, W)
 manDerQ = np.zeros((L, L), dtype=complex)
 manDerK = np.zeros((L, L), dtype=complex)
 manDerV = np.zeros((L, L), dtype=complex)
+manDerW = np.zeros((N, N), dtype=complex)
 
 D = 1e-5 + 1e-5j
 for k in range(L):
@@ -230,22 +232,29 @@ for k in range(L):
         Q1 = Q.copy()
         K1 = K.copy()
         V1 = V.copy()
+        W1 = W.copy()
 
         Q1[k, l] += D
         K1[k, l] += D
         V1[k, l] += D
+        W1[k, l] += D
 
         coeffQ = calc_aI(state, Q1, K, V, W)[-1]
         coeffK = calc_aI(state, Q, K1, V, W)[-1]
         coeffV = calc_aI(state, Q, K, V1, W)[-1]
+        coeffW = calc_aI(state, Q, K, V, W1)[-1]
 
         manDerQ[k, l] = (coeffQ - coeff) / D
         manDerK[k, l] = (coeffK - coeff) / D
         manDerV[k, l] = (coeffV - coeff) / D
+        manDerW[k, l] = (coeffW - coeff) / D
 
+print()
 print(spla.norm(manDerQ - Qder))
 print(spla.norm(manDerK - Kder))
 print(spla.norm(manDerV - Vder))
+
+
 
 
 
