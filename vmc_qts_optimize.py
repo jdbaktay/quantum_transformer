@@ -4,6 +4,7 @@ import time
 import math
 import numpy as np
 import sys
+import itertools
 from numpy import exp, sqrt
 from matplotlib import pyplot as pl
 from jax import config
@@ -11,11 +12,25 @@ config.update("jax_enable_x64", True)
 
 t0 = time.time()
 
+def intersection(list1, list2):
+    set1 = set(map(tuple, list1))
+    set2 = set(map(tuple, list2))
+
+    intersection_set = set1.intersection(set2)
+
+    intersection_list = list(map(list, intersection_set))
+    return intersection_list
+
 class SpinConfig:
     def __init__(self, k, L, Q, K, V, W):
         self.k = k
         self.L = L
-        self.spin = np.random.choice([-0.5, 0.5], size=L)  
+
+        self.spin = np.ones(self.L) 
+        self.spin[: self.L//2] = -1
+        self.spin *= 0.5
+        self.spin = self.spin[np.random.permutation(self.L)]
+
         self.mult = 1
         self.phase = 1
         self.coefficient = self.Psi(self.spin, Q, K, V, W)
@@ -86,7 +101,11 @@ class SpinConfig:
         i = int(np.random.random() * self.L)
         j = int(np.random.random() * self.L)
 
+        spin_translations = self.translations(self.spin)
+
         while not found:
+            # print(found)
+            # print(self.spin)
             while self.spin[i] == self.spin[j]:
                 i = int(np.random.random() * self.L)
                 j = int(np.random.random() * self.L)
@@ -95,9 +114,22 @@ class SpinConfig:
             new_spins[i] *= -1
             new_spins[j] *= -1
 
-            rep, mult, phase = self.representative(new_spins)
+            # print(new_spins)
 
-            print(self.spin, new_spins, rep)
+            new_spin_translations = self.translations(new_spins)
+
+            inter = intersection(spin_translations, new_spin_translations)
+
+            if inter:
+                i = int(np.random.random() * self.L)
+                j = int(np.random.random() * self.L)
+                continue
+
+            rep, mult, phase = self.representative(new_spins)
+            # print('phase=', phase)
+
+            # print(rep)
+            # print()
 
             if phase != 0:
                 for n in range(self.L):
@@ -109,9 +141,9 @@ class SpinConfig:
 
                     # Modification
 
-                    else:
-                        i = int(np.random.random() * self.L)
-                        j = int(np.random.random() * self.L)
+                    # else:
+                    #     i = int(np.random.random() * self.L)
+                    #     j = int(np.random.random() * self.L)
 
                     ####################################################
 
@@ -220,16 +252,16 @@ def get_logders(state, Q, K, V, W):
 
     #################### logder_V ######################################
 
-    reorder = list(range(0, N, 2)) + list(range(1, N, 2))
+    reorder = [i*L + j for j, i in itertools.product(range(L), range(Nc))]
 
     aIxI = (aI[:, np.newaxis] * xlist).reshape(N)[reorder]
 
     WaJv = (W @ aJv)[reorder]
     aJvW = (aJv @ W)[reorder]
 
-    WaJv_sets = [WaJv[:N//2], WaJv[N//2:]] 
-    aJvW_sets = [aJvW[:N//2], aJvW[N//2:]] 
-    aIxI_sets = [aIxI[:N//2], aIxI[N//2:]]
+    WaJv_sets = [WaJv[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
+    aJvW_sets = [aJvW[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
+    aIxI_sets = [aIxI[i * (Nc):(i + 1) * (N // L)] for i in range(L)]
 
     tmp_logder_V = np.zeros((L, L), dtype=complex)
     for i in range(L):
@@ -318,9 +350,11 @@ def get_E_QKVW_MC_SR(Nsample, Q, K, V, W, MARSHALL_SIGN, L2_1, L2_2):
 
     k = 0
     spin_config = SpinConfig(k, N, Q, K, V, W)
+
+    print(spin_config.get_spin())
         
     for i in range(Nsample):
-        print('i =', i)
+        # print('i =', i)
         # for j in range(3): # need this loop?
         nchanges = spin_config.metropolis_step(Q, K, V, W)
         state = spin_config.get_spin()
